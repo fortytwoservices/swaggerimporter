@@ -8,6 +8,8 @@
 bin/*
 Dockerfile.cross
 
+swaggerimporter
+
 # Test binary, built with `go test -c`
 *.test
 
