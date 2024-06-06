@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,8 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/portforward"
-	"k8s.io/client-go/transport/spdy"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -35,15 +31,6 @@ type SwaggerImportReconciler struct {
 
 //+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 
-// get in cluster config for the controller
-func (r *SwaggerImportReconciler) getConfig() (*rest.Config, error) {
-    config, err := rest.InClusterConfig()
-    if err != nil {
-        return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
-    }
-    return config, nil
-}
-
 // Reconcile function to reconcile SwaggerImport
 func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
     log := r.Log.WithValues("swaggerimport", req.NamespacedName)
@@ -52,7 +39,7 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
     var pod corev1.Pod
     if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
         log.Error(err, "Failed to get pod")
-        return ctrl.Result{}, client.IgnoreNotFound(err)
+        return ctrl.Result{RequeueAfter: 5 * time.Minute}, client.IgnoreNotFound(err)
     }
 
     // extract the 'app' label from the pod or skip
@@ -67,157 +54,126 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
     apiLabelSelector := client.MatchingLabels{"application": appName}
     if err := r.List(ctx, &apis, client.MatchingLabels(apiLabelSelector)); err != nil {
         log.Error(err, "Failed to list API resources", "appName", appName)
-        return ctrl.Result{}, err
+        return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
     }
 
     if len(apis.Items) == 0 {
-        return ctrl.Result{}, nil  // no matches, skip
+        return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
     }
 
     // handle each version
     for _, api := range apis.Items {
-        log.Info("Processing matching API", "API Name", api.Name, "Label Matched", appName)
-        // assuming swagger file available on /swagger/<version>/swagger.json
-        err := r.portForwardAndFetch(ctx, pod.Name, pod.Namespace, api.Name, appName)
+		log.Info("Processing matching API", "API Name", api.Name, "Label Matched", appName)
+		version := fmt.Sprintf("v%s.0", strings.Split(strings.Split(api.Name, "-v")[1], ".")[0])
+		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, appName, version)
+		if err != nil {
+			log.Error(err, "Failed to fetch Swagger JSON", "apiName", api.Name)
+			continue  // continue with other APIs if this one fails
+		}
+	}
+
+    return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+func (r *SwaggerImportReconciler) getPorts(ctx context.Context, clientset *kubernetes.Clientset, namespace, appName string) ([]int32, error) {
+    var ports []int32
+
+    // fetch service based on label
+    svc, err := clientset.CoreV1().Services(namespace).Get(ctx, appName, metav1.GetOptions{})
+    if err != nil {
+        return nil, fmt.Errorf("failed to get service: %s, error: %v", appName, err)
+    }
+
+    // add service ports to range
+    for _, port := range svc.Spec.Ports {
+        ports = append(ports, port.Port)
+    }
+
+    // try pod ports if service not available
+    if len(ports) == 0 {
+        pod, err := clientset.CoreV1().Pods(namespace).Get(ctx, appName, metav1.GetOptions{})
         if err != nil {
-            log.Error(err, "Failed to port-forward and fetch Swagger JSON", "podName", pod.Name, "apiName", api.Name)
-            continue  // continue with other APIs if this one fails
+            return nil, fmt.Errorf("failed to get pod: %s, error: %v", appName, err)
+        }
+        for _, container := range pod.Spec.Containers {
+            for _, containerPort := range container.Ports {
+                ports = append(ports, containerPort.ContainerPort)
+            }
         }
     }
 
-    return ctrl.Result{}, nil
+    if len(ports) == 0 {
+        return nil, fmt.Errorf("no available ports for service: %s", appName)
+    }
+
+    return ports, nil
 }
 
-func (r *SwaggerImportReconciler) getPorts(ctx context.Context, clientset *kubernetes.Clientset, namespace, podName, appName string) ([]int32, error) {
-	var ports []int32
+func (r *SwaggerImportReconciler) needsUpdate(ctx context.Context, apiName, appName, newSwaggerJSON string) (bool, error) {
+    api := &apimanagementv1beta1.API{}
+    if err := r.Get(ctx, client.ObjectKey{Name: apiName, Namespace: appName}, api); err != nil {
+        return false, err
+    }
 
-	// attempt to fetch the service to find the ports
-	svc, err := clientset.CoreV1().Services(namespace).Get(ctx, appName, metav1.GetOptions{})
-	if err == nil && len(svc.Spec.Ports) > 0 {
-		for _, port := range svc.Spec.Ports {
-			if port.Port != 80 { // Skip port 80
-				ports = append(ports, port.Port)
-			}
-		}
-	} else {
-		// fallback to pod ports if service ports are not found
-		pod, err := clientset.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
-		if err != nil {
-			return nil, err
-		}
-		if len(pod.Spec.Containers) > 0 {
-			for _, containerPort := range pod.Spec.Containers[0].Ports {
-				if containerPort.ContainerPort != 80 { // skip 80 as pf wont work
-					ports = append(ports, containerPort.ContainerPort)
-				}
-			}
-		}
-	}
-
-	if len(ports) == 0 {
-		return nil, fmt.Errorf("no available ports for service: %s", appName)
-	}
-
-	return ports, nil
+    // match swagger to imports
+    if len(api.Spec.ForProvider.Import) > 0 {
+        currentSwaggerJSON := api.Spec.ForProvider.Import[0].ContentValue
+        return currentSwaggerJSON != nil && *currentSwaggerJSON != newSwaggerJSON, nil
+    }
+    return true, nil
 }
 
-func (r *SwaggerImportReconciler) portForwardAndFetch(ctx context.Context, podName, namespace, apiName, appName string) error {
-	config, err := r.getConfig()
-	if err != nil {
-		r.Log.Error(err, "Failed to get configuration")
-		return err
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		r.Log.Error(err, "Failed to create clientset")
-		return err
-	}
-
-	ports, err := r.getPorts(ctx, clientset, namespace, podName, appName)
-	if err != nil {
-		r.Log.Error(err, "Failed to get ports", "ServiceName", appName)
-		return err
-	}
-
-	localPort := "10000"
-	var success bool // check if successful
-	var finalErr error // store finall error if all fails
-
-	for _, remotePort := range ports {
-		if r.portForwardAndFetchOnPort(ctx, namespace, podName, apiName, appName, localPort, strconv.Itoa(int(remotePort))) {
-			success = true
-			break
-		}
-	}
-
-	if !success {
-		r.Log.Error(finalErr, "Failed to port-forward on any ports for service", "ServiceName", appName)
-		return fmt.Errorf("failed to port-forward on any ports for service: %s", appName)
-	}
-
-	return nil
-}
-
-func (r *SwaggerImportReconciler) portForwardAndFetchOnPort(ctx context.Context, namespace, podName, apiName, appName, localPort, remotePortStr string) bool {
-	r.Log.Info("Attempting port-forward", "PodName", podName, "APIName", apiName, "LocalPort", localPort, "RemotePort", remotePortStr)
-
-	// setup port-forward on the discoverd port
-	stopChan, readyChan, errChan := make(chan struct{}), make(chan struct{}), make(chan error)
-	go func() {
-		err := r.portForward(namespace, podName, localPort, remotePortStr, stopChan, readyChan, errChan)
-		if err != nil {
-			errChan <- err
-		}
-	}()
-
-	select {
-	case <-readyChan:
-		r.Log.Info("Port-forward successful", "RemotePort", remotePortStr)
-		version := fmt.Sprintf("v%s.0", strings.Split(strings.Split(apiName, "-v")[1], ".")[0])
-		if err := r.fetchAndSaveSwagger(ctx, localPort, apiName, appName, version); err == nil {
-			close(stopChan)
-			return true
-		}
-	case err := <-errChan:
-		r.Log.Error(err, "Port-forward error", "RemotePort", remotePortStr)
-	case <-time.After(10 * time.Second):
-		r.Log.Error(nil, "Port-forward timeout", "RemotePort", remotePortStr)
-	}
-	close(stopChan)
-	return false
-}
-
-func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, localPort, apiName, appName, version string) error {
-    swaggerURL := fmt.Sprintf("http://localhost:%s/swagger/%s/swagger.json", localPort, version)
-    resp, err := http.Get(swaggerURL)
+func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, namespace, apiName, appName, version string) error {
+    ports, err := r.getPorts(ctx, r.Clientset, namespace, appName)
     if err != nil {
-        return err
-    }
-    defer resp.Body.Close()
-
-    if resp.StatusCode != http.StatusOK {
-        r.Log.Info("Swagger version not found or invalid", "version", version)
-        return fmt.Errorf("swagger version not found or invalid: %s", version)
-    }
-
-    swaggerJSON, err := ioutil.ReadAll(resp.Body)
-    if err != nil {
-        r.Log.Error(err, "Failed to read swagger.json", "URL", swaggerURL)
+        r.Log.Error(err, "Failed to get service ports", "appName", appName)
         return err
     }
 
-    r.Log.Info("Swagger JSON fetched successfully")
+    var lastError error
+    for _, port := range ports {
+        swaggerURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/swagger/%s/swagger.json", appName, namespace, port, version)
+        resp, err := http.Get(swaggerURL)
+        if err != nil {
+            lastError = err
+            continue // keep trying ports if one fails
+        }
+        defer resp.Body.Close()
 
-    // convert swaggerJSON to a string
-    swaggerJSONString := string(swaggerJSON)
+        if resp.StatusCode == http.StatusOK {
+            swaggerJSON, err := ioutil.ReadAll(resp.Body)
+            if err != nil {
+                lastError = err
+                continue
+            }
 
-    if err := r.patchAPIResource(ctx, apiName, appName, swaggerJSONString); err != nil {
-        r.Log.Error(err, "Failed to patch API resource", "APIName", apiName)
-        return err
+            r.Log.Info("Swagger JSON fetched successfully", "URL", swaggerURL)
+            swaggerJSONString := string(swaggerJSON)
+
+            // Check if update is necessary
+            needsUpdate, err := r.needsUpdate(ctx, apiName, appName, swaggerJSONString)
+            if err != nil {
+                r.Log.Error(err, "Error checking if update is needed")
+                lastError = err
+                continue
+            }
+
+            if needsUpdate {
+                if err := r.patchAPIResource(ctx, apiName, appName, swaggerJSONString); err != nil {
+                    lastError = err
+                    continue
+                }
+            } else {
+                r.Log.Info("API is up to date; no update required", "APIName", apiName)
+            }
+
+            return nil
+        } else {
+            lastError = fmt.Errorf("swagger version not found or invalid: %s, HTTP status: %d", version, resp.StatusCode)
+        }
     }
 
-    return nil
+    return lastError // return error if all fails
 }
 
 func (r *SwaggerImportReconciler) patchAPIResource(ctx context.Context, apiName string, appName string, swaggerJSON string) error {
@@ -244,34 +200,6 @@ func (r *SwaggerImportReconciler) patchAPIResource(ctx context.Context, apiName 
     return nil
 }
 
-func (r *SwaggerImportReconciler) portForward(namespace, podName, localPort, remotePort string, stopChan, readyChan chan struct{}, errChan chan error) error {
-    path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", namespace, podName)
-    hostIP := strings.TrimLeft(r.Config.Host, "htps:/")
-    serverURL := url.URL{Scheme: "https", Path: path, Host: hostIP}
-
-    transport, upgrader, err := spdy.RoundTripperFor(r.Config)
-    if err != nil {
-        return fmt.Errorf("failed to create roundtripper: %w", err)
-    }
-
-    dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, &serverURL)
-
-    ports := []string{fmt.Sprintf("%s:%s", localPort, remotePort)}
-    pf, err := portforward.New(dialer, ports, stopChan, readyChan, nil, nil)
-    if err != nil {
-        return fmt.Errorf("failed to create portforward: %w", err)
-    }
-
-    go func() {
-        err := pf.ForwardPorts()
-        if err != nil {
-            errChan <- err
-        }
-    }()
-
-    return nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *SwaggerImportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
@@ -284,7 +212,7 @@ func (r *SwaggerImportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
 		WithEventFilter(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-			// Check if the 'app' label is present
+			// check if the 'app' label is present
 			_, found := obj.GetLabels()["app"]
 			return found
 		})).
