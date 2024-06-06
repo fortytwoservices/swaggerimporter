@@ -3,11 +3,11 @@ kind: ServiceAccount
 metadata:
   name: workload-identity-swaggerimporter
   namespace: services
-  labels:
-    azure.workload.identity/use: "true"
-  annotations:
-    azure.workload.identity/client-id: client_id
-    azure.workload.identity/tenant-id: tenant_id
+#   labels:
+#     azure.workload.identity/use: "true"
+#   annotations:
+#     azure.workload.identity/client-id: client_id
+#     azure.workload.identity/tenant-id: tenant_id
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -45,7 +45,7 @@ spec:
     metadata:
       labels:
         name: swaggerimporter
-        azure.workload.identity/use: "true"
+        # azure.workload.identity/use: "true"
     spec:
       serviceAccountName: workload-identity-swaggerimporter
       containers:
