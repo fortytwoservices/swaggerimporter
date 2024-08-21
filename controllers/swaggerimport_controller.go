@@ -39,7 +39,7 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
     var pod corev1.Pod
     if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
         log.Error(err, "Failed to get pod")
-        return ctrl.Result{RequeueAfter: 60 * time.Minute}, client.IgnoreNotFound(err)
+        return ctrl.Result{RequeueAfter: 1 * time.Minute}, client.IgnoreNotFound(err)
     }
 
     // extract the 'app' label from the pod or skip
@@ -54,11 +54,11 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
     apiLabelSelector := client.MatchingLabels{"application": appName}
     if err := r.List(ctx, &apis, client.MatchingLabels(apiLabelSelector)); err != nil {
         log.Error(err, "Failed to list API resources", "appName", appName)
-        return ctrl.Result{RequeueAfter: 60 * time.Minute}, err
+        return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
     }
 
     if len(apis.Items) == 0 {
-        return ctrl.Result{RequeueAfter: 60 * time.Minute}, nil
+        return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
     }
 
     // handle each version
@@ -72,7 +72,7 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-    return ctrl.Result{RequeueAfter: 60 * time.Minute}, nil
+    return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 }
 
 func (r *SwaggerImportReconciler) getPorts(ctx context.Context, clientset *kubernetes.Clientset, namespace, appName string) ([]int32, error) {
