@@ -1,9 +1,6 @@
 name: Build and Push to GHCR
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
