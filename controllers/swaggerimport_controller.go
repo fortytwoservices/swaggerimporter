@@ -11,6 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	apimanagementv1beta1 "github.com/upbound/provider-azure/apis/apimanagement/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -38,8 +39,13 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
     // fetch the pod that triggered the reconcile
     var pod corev1.Pod
     if err := r.Get(ctx, req.NamespacedName, &pod); err != nil {
-        log.Error(err, "Failed to get pod")
-        return ctrl.Result{RequeueAfter: 1 * time.Minute}, client.IgnoreNotFound(err)
+        if errors.IsNotFound(err) {
+            // pod does not exist anymore
+            log.Info("Pod not found, will not requeue", "name", req.NamespacedName)
+            return ctrl.Result{}, nil // no requeue
+        }
+        log.Error(err, "Failed to get pod, requeuing")
+        return ctrl.Result{RequeueAfter: 1 * time.Minute}, err // requeue still for other errors
     }
 
     // extract the 'app' label from the pod or skip
