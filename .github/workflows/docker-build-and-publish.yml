@@ -31,7 +31,7 @@ jobs:
       uses: docker/build-push-action@v2
       with:
         push: true
-        tags: ghcr.io/${{ github.repository_owner }}/swaggerimporter:${{ github.sha }}
+        tags: ghcr.io/${{ github.repository_owner }}/swaggerimporter:${{ github.sha }}.slice(0, 5)
 
     - name: View the image in GHCR
       run: echo "Navigate to 'https://github.com/users/${{ github.repository_owner }}/packages' to see your container."
