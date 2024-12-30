@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/go-logr/logr v1.4.2
-	github.com/onsi/ginkgo/v2 v2.22.1
+	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
 	github.com/upbound/provider-azure v1.10.2
 	k8s.io/api v0.32.0
