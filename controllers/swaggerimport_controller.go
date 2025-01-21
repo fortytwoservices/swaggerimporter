@@ -245,7 +245,7 @@ func (r *SwaggerImportReconciler) createIngress(ctx context.Context, namespace s
         ingressName := fmt.Sprintf("%s-ingress", serviceName)
         host := fmt.Sprintf("%s.%s", serviceName, r.Domain)
 
-        desiredIngress := &v1Networking.Ingress{
+        ingress := &v1Networking.Ingress{
             ObjectMeta: metav1.ObjectMeta{
                 Name:      ingressName,
                 Namespace: namespace,
@@ -298,7 +298,7 @@ func (r *SwaggerImportReconciler) createIngress(ctx context.Context, namespace s
         }
 
         if !exists {
-            if err := r.Client.Create(ctx, desiredIngress); err != nil {
+            if err := r.Client.Create(ctx, ingress); err != nil {
                 return fmt.Errorf("failed to create ingress %s: %v", ingressName, err)
             }
             r.Log.Info("Ingress created", "ingress", ingressName)
