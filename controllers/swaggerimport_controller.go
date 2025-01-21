@@ -245,7 +245,7 @@ func (r *SwaggerImportReconciler) createIngress(ctx context.Context, namespace s
         ingressName := fmt.Sprintf("%s-ingress", serviceName)
         host := fmt.Sprintf("%s.%s", serviceName, r.Domain)
 
-        ingress := &v1Networking.Ingress{
+        desiredIngress := &v1Networking.Ingress{
             ObjectMeta: metav1.ObjectMeta{
                 Name:      ingressName,
                 Namespace: namespace,
@@ -292,13 +292,32 @@ func (r *SwaggerImportReconciler) createIngress(ctx context.Context, namespace s
             },
         }
 
-        if err := r.Client.Create(ctx, ingress); err != nil && !errors.IsAlreadyExists(err) {
-            return fmt.Errorf("failed to create ingress for %s: %v", application, err)
+        exists, err := r.ingressExists(ctx, ingressName, namespace)
+        if err != nil {
+            return fmt.Errorf("failed to check ingress existence: %v", err)
         }
-        r.Log.Info("Ingress created or updated", "ingress", ingress.Name, "domain", r.Domain)
+
+        if !exists {
+            if err := r.Client.Create(ctx, desiredIngress); err != nil {
+                return fmt.Errorf("failed to create ingress %s: %v", ingressName, err)
+            }
+            r.Log.Info("Ingress created", "ingress", ingressName)
+        }
     }
 
     return nil
+}
+
+func (r *SwaggerImportReconciler) ingressExists(ctx context.Context, name, namespace string) (bool, error) {
+    existingIngress := &v1Networking.Ingress{}
+    if err := r.Client.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, existingIngress); err != nil {
+        if errors.IsNotFound(err) {
+            return false, nil
+        }
+        return false, fmt.Errorf("failed to check ingress existence: %v", err)
+    }
+
+    return true, nil
 }
 
 // helper function to check for latest verison of api
