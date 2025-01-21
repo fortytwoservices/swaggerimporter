@@ -218,9 +218,8 @@ func (r *SwaggerImportReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
 		WithEventFilter(predicate.NewPredicateFuncs(func(obj client.Object) bool {
-			// check if the 'app' label is present
-			_, found := obj.GetLabels()["app"]
-			return found
+			// only applications with label swaggerimporter = true will trigger reconcile
+            return obj.GetLabels()["swaggerimporter"] == "true"
 		})).
 		Complete(r)
 }
