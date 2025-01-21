@@ -84,6 +84,13 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
+    // create ingress resources
+    log.Info("Creating ingress resources for matching APIs", "appName", appName, "namespace", pod.Namespace)
+    if err := r.createIngress(ctx, pod.Namespace, apis.Items); err != nil {
+        log.Error(err, "Failed to create ingress resources", "appName", appName)
+        return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+    }
+
     return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 }
 
@@ -225,14 +232,27 @@ func (r *SwaggerImportReconciler) createIngress(ctx context.Context, namespace s
 
     pathTypePrefix := v1Networking.PathTypePrefix
 
-    for appName, latestAPI := range latestVersions {
-        version := strings.Split(strings.Split(latestAPI.Name, "-v")[1], ".")[0]
-        host := fmt.Sprintf("%s.v%s.%s", appName, version, r.Domain)
+    for _, latestAPI := range latestVersions {
+        parts := strings.Split(latestAPI.Name, "-")
+        if len(parts) < 5 {
+            r.Log.Error(fmt.Errorf("invalid API name format"), "API skipped due to invalid name format", "appName", latestAPI.Name)
+            continue
+        }
+
+        application := parts[3]
+        version := parts[4]
+        serviceName := fmt.Sprintf("%s-%s", application, version)
+        ingressName := fmt.Sprintf("%s-ingress", serviceName)
+        host := fmt.Sprintf("%s.%s", serviceName, r.Domain)
 
         ingress := &v1Networking.Ingress{
             ObjectMeta: metav1.ObjectMeta{
-                Name:      fmt.Sprintf("%s-ingress", appName),
+                Name:      ingressName,
                 Namespace: namespace,
+                Labels: map[string]string{
+                    "managed-by": "swagger-importer",
+                    "app":        application,
+                },
                 Annotations: map[string]string{
                     "kubernetes.io/ingress.class":        "traefik-internal",
                     "cert-manager.io/cluster-issuer":    "letsencrypt",
@@ -243,7 +263,7 @@ func (r *SwaggerImportReconciler) createIngress(ctx context.Context, namespace s
                 TLS: []v1Networking.IngressTLS{
                     {
                         Hosts:      []string{host},
-                        SecretName: fmt.Sprintf("%s-tls", appName),
+                        SecretName: fmt.Sprintf("%s-ingress-tls", application),
                     },
                 },
                 Rules: []v1Networking.IngressRule{
@@ -257,7 +277,7 @@ func (r *SwaggerImportReconciler) createIngress(ctx context.Context, namespace s
                                         PathType: &pathTypePrefix,
                                         Backend: v1Networking.IngressBackend{
                                             Service: &v1Networking.IngressServiceBackend{
-                                                Name: appName,
+                                                Name: serviceName,
                                                 Port: v1Networking.ServiceBackendPort{
                                                     Number: 80,
                                                 },
@@ -273,7 +293,7 @@ func (r *SwaggerImportReconciler) createIngress(ctx context.Context, namespace s
         }
 
         if err := r.Client.Create(ctx, ingress); err != nil && !errors.IsAlreadyExists(err) {
-            return fmt.Errorf("failed to create ingress for %s: %v", appName, err)
+            return fmt.Errorf("failed to create ingress for %s: %v", application, err)
         }
         r.Log.Info("Ingress created or updated", "ingress", ingress.Name, "domain", r.Domain)
     }
