@@ -126,7 +126,6 @@ func main() {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Log:    ctrl.Log.WithName("controllers").WithName("SwaggerImport"),
-		Domain: os.Getenv("DOMAIN"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SwaggerImport")
 		os.Exit(1)
