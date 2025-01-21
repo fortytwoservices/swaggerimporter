@@ -5,17 +5,22 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+
+	"os"
 
 	"github.com/go-logr/logr"
 	apimanagementv1beta1 "github.com/upbound/provider-azure/apis/apimanagement/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	v1Networking "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -28,6 +33,7 @@ type SwaggerImportReconciler struct {
 	Log       logr.Logger
 	Clientset *kubernetes.Clientset
 	Config    *rest.Config
+    Domain string
 }
 
 //+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
@@ -77,6 +83,13 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			continue  // continue with other APIs if this one fails
 		}
 	}
+
+    // create ingress resources
+    log.Info("Creating ingress resources for matching APIs", "appName", appName, "namespace", pod.Namespace)
+    if err := r.createIngress(ctx, pod.Namespace, apis.Items); err != nil {
+        log.Error(err, "Failed to create ingress resources", "appName", appName)
+        return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+    }
 
     return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 }
@@ -206,14 +219,120 @@ func (r *SwaggerImportReconciler) patchAPIResource(ctx context.Context, apiName 
     return nil
 }
 
+func (r *SwaggerImportReconciler) createIngress(ctx context.Context, namespace string, apis []apimanagementv1beta1.API) error {
+    latestVersions := make(map[string]apimanagementv1beta1.API)
+
+    // get latest version for ingress creation
+    for _, api := range apis {
+        appName := strings.Split(api.Name, "-v")[0] // get app name from labels
+        if existing, found := latestVersions[appName]; !found || checkVersion(api.Name, existing.Name) {
+            latestVersions[appName] = api
+        }
+    }
+
+    pathTypePrefix := v1Networking.PathTypePrefix
+
+    for _, latestAPI := range latestVersions {
+        parts := strings.Split(latestAPI.Name, "-")
+        if len(parts) < 5 {
+            r.Log.Error(fmt.Errorf("invalid API name format"), "API skipped due to invalid name format", "appName", latestAPI.Name)
+            continue
+        }
+
+        application := parts[3]
+        version := parts[4]
+        serviceName := fmt.Sprintf("%s-%s", application, version)
+        ingressName := fmt.Sprintf("%s-ingress", serviceName)
+        host := fmt.Sprintf("%s.%s", serviceName, r.Domain)
+
+        ingress := &v1Networking.Ingress{
+            ObjectMeta: metav1.ObjectMeta{
+                Name:      ingressName,
+                Namespace: namespace,
+                Labels: map[string]string{
+                    "managed-by": "swagger-importer",
+                    "app":        application,
+                },
+                Annotations: map[string]string{
+                    "kubernetes.io/ingress.class":        "traefik-internal",
+                    "cert-manager.io/cluster-issuer":    "letsencrypt",
+                },
+            },
+            Spec: v1Networking.IngressSpec{
+                IngressClassName: pointer.String("traefik-internal"),
+                TLS: []v1Networking.IngressTLS{
+                    {
+                        Hosts:      []string{host},
+                        SecretName: fmt.Sprintf("%s-ingress-tls", application),
+                    },
+                },
+                Rules: []v1Networking.IngressRule{
+                    {
+                        Host: host,
+                        IngressRuleValue: v1Networking.IngressRuleValue{
+                            HTTP: &v1Networking.HTTPIngressRuleValue{
+                                Paths: []v1Networking.HTTPIngressPath{
+                                    {
+                                        Path:     "/",
+                                        PathType: &pathTypePrefix,
+                                        Backend: v1Networking.IngressBackend{
+                                            Service: &v1Networking.IngressServiceBackend{
+                                                Name: serviceName,
+                                                Port: v1Networking.ServiceBackendPort{
+                                                    Number: 80,
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+
+        if err := r.Client.Create(ctx, ingress); err != nil && !errors.IsAlreadyExists(err) {
+            return fmt.Errorf("failed to create ingress for %s: %v", application, err)
+        }
+        r.Log.Info("Ingress created or updated", "ingress", ingress.Name, "domain", r.Domain)
+    }
+
+    return nil
+}
+
+// helper function to check for latest verison of api
+func checkVersion(current, existing string) bool {
+    currentVersion := extractVersionNumber(current)
+    existingVersion := extractVersionNumber(existing)
+    return currentVersion > existingVersion
+}
+
+// helper function to extract the version number from api name
+func extractVersionNumber(apiName string) int {
+    parts := strings.Split(apiName, "-v")
+    if len(parts) < 2 {
+        return 0
+    }
+    versionParts := strings.Split(parts[1], ".")
+    version, _ := strconv.Atoi(versionParts[0])
+    return version
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *SwaggerImportReconciler) SetupWithManager(mgr ctrl.Manager) error {
+    env := os.Getenv("DOMAIN")
+    if env == "" {
+        env = "DOMAIN environment variable not configured"
+    }
+
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return err
 	}
 	r.Clientset = clientset
 	r.Config = mgr.GetConfig()
+    r.Domain = env
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
