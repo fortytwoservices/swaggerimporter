@@ -1,12 +1,11 @@
 module github.com/fortytwoservices/swagger-importer
 
 go 1.23.0
-
 require (
 	github.com/go-logr/logr v1.4.2
 	github.com/onsi/ginkgo/v2 v2.22.2
 	github.com/onsi/gomega v1.36.2
-	github.com/upbound/provider-azure v1.11.0
+	github.com/upbound/provider-azure v1.11.1
 	k8s.io/api v0.32.1
 	k8s.io/apimachinery v0.32.1
 	k8s.io/client-go v0.32.1
