@@ -204,8 +204,8 @@ github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOf
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/tmccombs/hcl2json v0.3.3 h1:+DLNYqpWE0CsOQiEZu+OZm5ZBImake3wtITYxQ8uLFQ=
 github.com/tmccombs/hcl2json v0.3.3/go.mod h1:Y2chtz2x9bAeRTvSibVRVgbLJhLJXKlUeIvjeVdnm4w=
-github.com/upbound/provider-azure v1.12.0 h1:9AvTkof1manV+WCb9jkp4A/9+qp+cXcky228gEdvPLw=
-github.com/upbound/provider-azure v1.12.0/go.mod h1:VQkffBxOfdwuIfxJfHsTgE4LlAlS63cbVBBfmOTUPBI=
+github.com/upbound/provider-azure v1.13.0 h1:36FxmPxOBfpwxSSMmHAyCnN0jFddjTcHz9RyaDmZyog=
+github.com/upbound/provider-azure v1.13.0/go.mod h1:VQkffBxOfdwuIfxJfHsTgE4LlAlS63cbVBBfmOTUPBI=
 github.com/vmihailenco/msgpack v3.3.3+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=
 github.com/vmihailenco/msgpack v4.0.4+incompatible h1:dSLoQfGFAo3F6OoNhwUmLwVgaUXK79GlxNBwueZn0xI=
 github.com/vmihailenco/msgpack v4.0.4+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=
