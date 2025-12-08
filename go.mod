@@ -6,8 +6,8 @@ toolchain go1.24.1
 
 require (
 	github.com/go-logr/logr v1.4.3
-	github.com/onsi/ginkgo/v2 v2.27.2
-	github.com/onsi/gomega v1.38.2
+	github.com/onsi/ginkgo/v2 v2.27.3
+	github.com/onsi/gomega v1.38.3
 	github.com/upbound/provider-azure v1.13.0
 	k8s.io/api v0.34.2
 	k8s.io/apimachinery v0.34.2
