@@ -223,4 +223,42 @@ var _ = Describe("SwaggerImportReconciler", func() {
 			Expect(*updatedAPI.Spec.ForProvider.Import.ContentValue).To(Equal(mockSwaggerJSON))
 		})
 	})
+
+	Context("parseVersion function", func() {
+		It("should correctly parse valid API name with version", func() {
+			version, err := parseVersion("test-app-v1.2.3")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal("v1.0"))
+		})
+
+		It("should correctly parse API name with single digit version", func() {
+			version, err := parseVersion("test-app-v1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal("v1.0"))
+		})
+
+		It("should correctly parse API name with major.minor version", func() {
+			version, err := parseVersion("my-service-v2.1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(version).To(Equal("v2.0"))
+		})
+
+		It("should return error when API name does not contain -v", func() {
+			_, err := parseVersion("test-app")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("does not contain '-v'"))
+		})
+
+		It("should return error when version part is empty", func() {
+			_, err := parseVersion("test-app-v")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("version part is empty"))
+		})
+
+		It("should return error when version format is invalid", func() {
+			_, err := parseVersion("test-app-v.")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid version format"))
+		})
+	})
 })
