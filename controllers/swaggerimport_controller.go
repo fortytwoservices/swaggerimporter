@@ -118,9 +118,9 @@ func parseVersion(apiName string) (string, error) {
 		return "", fmt.Errorf("API name does not contain version marker '-v': %s", apiName)
 	}
 
-	// Get the version part (everything after the last "-v")
+	// Get the version part (the last segment after splitting by "-v")
 	versionPart := parts[len(parts)-1]
-	
+
 	// Split by "." to get major version
 	versionComponents := strings.Split(versionPart, ".")
 	if len(versionComponents) == 0 || versionComponents[0] == "" {
