@@ -99,7 +99,8 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			log.Error(err, "Failed to parse version from API name", "apiName", api.Name)
 			continue // skip APIs with invalid name format
 		}
-		err = r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, api.Namespace, appName, version)
+		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, "", appName, version)
+
 		if err != nil {
 			log.Error(err, "Failed to fetch Swagger JSON", "apiName", api.Name)
 			continue // continue with other APIs if this one fails
