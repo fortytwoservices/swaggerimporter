@@ -30,7 +30,6 @@ type SwaggerImportReconciler struct {
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apimanagement.azure.upbound.io,resources=apis,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=apimanagement.azure.m.upbound.io,resources=apis,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch
 
 // Reconcile function to reconcile SwaggerImport
 func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
