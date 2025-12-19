@@ -91,7 +91,8 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	for _, api := range clusterAPIs.Items {
 		log.Info("Processing matching API", "API Name", api.Name, "Label Matched", appName)
 		version := fmt.Sprintf("v%s.0", strings.Split(strings.Split(api.Name, "-v")[1], ".")[0])
-		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, api.Namespace, appName, version)
+		// Explicitly pass empty string for cluster-scoped APIs (they don't have a namespace)
+		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, "", appName, version)
 		if err != nil {
 			log.Error(err, "Failed to fetch Swagger JSON", "apiName", api.Name)
 			continue // continue with other APIs if this one fails
