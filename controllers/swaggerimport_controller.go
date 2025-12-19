@@ -208,7 +208,7 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 	var lastError error
 	for _, port := range ports {
 		swaggerURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/swagger/%s/swagger.json", appName, namespace, port, version)
-		
+
 		// Use a function to ensure defer runs after each iteration
 		err := func() error {
 			resp, err := r.HTTPGet(swaggerURL)
