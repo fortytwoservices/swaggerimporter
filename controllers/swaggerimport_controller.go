@@ -64,7 +64,7 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
-	// fetch clustered api reosurces as well
+	// fetch clustered api resources as well
 	var clusterAPIs clusterapimanagement.APIList
 	if err := r.List(ctx, &clusterAPIs, client.MatchingLabels(apiLabelSelector), client.InNamespace("")); err != nil {
 		log.Error(err, "Failed to list clustered API resources", "appName", appName)
