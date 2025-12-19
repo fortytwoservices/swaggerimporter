@@ -47,7 +47,7 @@ jobs:
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         if: github.event_name == 'release'
         with:
-          file: ./docker/Dockerfile
+          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta_release_galaxy.outputs.tags }}
           labels: ${{ steps.meta_release_galaxy.outputs.labels }}
