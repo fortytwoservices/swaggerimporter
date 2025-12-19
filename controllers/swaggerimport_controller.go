@@ -208,45 +208,48 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 	var lastError error
 	for _, port := range ports {
 		swaggerURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/swagger/%s/swagger.json", appName, namespace, port, version)
-		resp, err := r.HTTPGet(swaggerURL)
-		if err != nil {
-			lastError = err
-			continue // keep trying ports if one fails
-		}
 
-		if resp.StatusCode == http.StatusOK {
-			swaggerJSON, err := io.ReadAll(resp.Body)
-			resp.Body.Close()
+		// Use a function to ensure defer runs after each iteration
+		err := func() error {
+			resp, err := r.HTTPGet(swaggerURL)
 			if err != nil {
-				lastError = err
-				continue
+				return err
 			}
+			defer resp.Body.Close()
 
-			r.Log.Info("Swagger JSON fetched successfully", "URL", swaggerURL)
-			swaggerJSONString := string(swaggerJSON)
-
-			// Check if update is necessary
-			needsUpdate, err := r.needsUpdate(ctx, apiName, namespaceApi, swaggerJSONString)
-			if err != nil {
-				r.Log.Error(err, "Error checking if update is needed")
-				lastError = err
-				continue
-			}
-
-			if needsUpdate {
-				if err := r.patchAPIResource(ctx, apiName, namespaceApi, swaggerJSONString); err != nil {
-					lastError = err
-					continue
+			if resp.StatusCode == http.StatusOK {
+				swaggerJSON, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return err
 				}
-			} else {
-				r.Log.Info("API is up to date; no update required", "APIName", apiName)
-			}
 
+				r.Log.Info("Swagger JSON fetched successfully", "URL", swaggerURL)
+				swaggerJSONString := string(swaggerJSON)
+
+				// Check if update is necessary
+				needsUpdate, err := r.needsUpdate(ctx, apiName, namespaceApi, swaggerJSONString)
+				if err != nil {
+					r.Log.Error(err, "Error checking if update is needed")
+					return err
+				}
+
+				if needsUpdate {
+					if err := r.patchAPIResource(ctx, apiName, namespaceApi, swaggerJSONString); err != nil {
+						return err
+					}
+				} else {
+					r.Log.Info("API is up to date; no update required", "APIName", apiName)
+				}
+
+				return nil
+			}
+			return fmt.Errorf("swagger version not found or invalid: %s, HTTP status: %d", version, resp.StatusCode)
+		}()
+
+		if err == nil {
 			return nil
-		} else {
-			resp.Body.Close()
-			lastError = fmt.Errorf("swagger version not found or invalid: %s, HTTP status: %d", version, resp.StatusCode)
 		}
+		lastError = err
 	}
 
 	return lastError // return error if all fails
