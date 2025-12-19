@@ -9,7 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	clusterapimanagement "github.com/upbound/provider-azure/v2/apis/cluster/apimanagement/v1beta1"
+	clusterapimanagement "github.com/upbound/provider-azure/v2/apis/cluster/apimanagement/v1beta2"
 	namespacedapimanagement "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -128,6 +128,95 @@ var _ = Describe("SwaggerImportReconciler", func() {
 			// Verify API was updated
 			updatedAPI := &namespacedapimanagement.API{}
 			err = fakeClient.Get(ctx, types.NamespacedName{Name: apiName, Namespace: namespaceApi}, updatedAPI)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updatedAPI.Spec.ForProvider.Import).NotTo(BeNil())
+			Expect(updatedAPI.Spec.ForProvider.Import.ContentValue).NotTo(BeNil())
+			Expect(*updatedAPI.Spec.ForProvider.Import.ContentValue).To(Equal(mockSwaggerJSON))
+		})
+	})
+
+	Context("When a Pod with swaggerimporter label exists and matches a Cluster API", func() {
+		It("should fetch swagger and update Cluster API resource", func() {
+			// Setup resources
+			podName := "test-pod-cluster"
+			namespacePod := "services"
+			appName := "test-app-cluster"
+			apiName := "test-app-cluster-v1"
+			// namespaceApi is empty for cluster resources
+
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      podName,
+					Namespace: namespacePod,
+					Labels: map[string]string{
+						"swaggerimporter": "true",
+						"app":             appName,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Ports: []corev1.ContainerPort{
+								{ContainerPort: 8080},
+							},
+						},
+					},
+				},
+			}
+
+			api := &clusterapimanagement.API{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: apiName,
+					Labels: map[string]string{
+						"application": appName,
+					},
+				},
+				Spec: clusterapimanagement.APISpec{
+					ForProvider: clusterapimanagement.APIParameters{
+						// Initialize with empty or default values if needed
+					},
+				},
+			}
+
+			service := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      appName,
+					Namespace: namespacePod,
+				},
+				Spec: corev1.ServiceSpec{
+					Ports: []corev1.ServicePort{
+						{Port: 8080},
+					},
+				},
+			}
+
+			fakeClient = fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod, api, service).Build()
+
+			reconciler = &SwaggerImportReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+				Log:    zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)),
+				HTTPGet: func(url string) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(bytes.NewBufferString(mockSwaggerJSON)),
+					}, nil
+				},
+			}
+
+			req := ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      podName,
+					Namespace: namespacePod,
+				},
+			}
+
+			_, err := reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify API was updated
+			updatedAPI := &clusterapimanagement.API{}
+			err = fakeClient.Get(ctx, types.NamespacedName{Name: apiName}, updatedAPI)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedAPI.Spec.ForProvider.Import).NotTo(BeNil())
 			Expect(updatedAPI.Spec.ForProvider.Import.ContentValue).NotTo(BeNil())

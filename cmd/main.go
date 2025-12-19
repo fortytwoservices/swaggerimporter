@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	//+kubebuilder:scaffold:imports
-	clusterapimanagement "github.com/upbound/provider-azure/v2/apis/cluster/apimanagement/v1beta1"
+	clusterapimanagement "github.com/upbound/provider-azure/v2/apis/cluster/apimanagement/v1beta2"
 	namespacedapimanagement "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 )
 

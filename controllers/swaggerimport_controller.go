@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	clusterapimanagement "github.com/upbound/provider-azure/v2/apis/cluster/apimanagement/v1beta1"
+	clusterapimanagement "github.com/upbound/provider-azure/v2/apis/cluster/apimanagement/v1beta2"
 	namespacedapimanagement "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -104,7 +104,7 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *SwaggerImportReconciler) getPorts(ctx context.Context, namespace, appName string) ([]int32, error) {
 	var ports []int32
 
-	// fetch service based on label
+	// fetch service based on name
 	svc := &corev1.Service{}
 	err := r.Get(ctx, client.ObjectKey{Name: appName, Namespace: namespace}, svc)
 	if err != nil {
@@ -138,6 +138,20 @@ func (r *SwaggerImportReconciler) getPorts(ctx context.Context, namespace, appNa
 }
 
 func (r *SwaggerImportReconciler) needsUpdate(ctx context.Context, apiName, namespaceApi, newSwaggerJSON string) (bool, error) {
+	if namespaceApi == "" {
+		api := &clusterapimanagement.API{}
+		if err := r.Get(ctx, client.ObjectKey{Name: apiName}, api); err != nil {
+			return false, err
+		}
+
+		// match swagger to imports
+		if api.Spec.ForProvider.Import != nil {
+			currentSwaggerJSON := api.Spec.ForProvider.Import.ContentValue
+			return currentSwaggerJSON != nil && *currentSwaggerJSON != newSwaggerJSON, nil
+		}
+		return true, nil
+	}
+
 	api := &namespacedapimanagement.API{}
 	if err := r.Get(ctx, client.ObjectKey{Name: apiName, Namespace: namespaceApi}, api); err != nil {
 		return false, err
@@ -205,12 +219,34 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 }
 
 func (r *SwaggerImportReconciler) patchAPIResource(ctx context.Context, apiName string, namespaceApi string, swaggerJSON string) error {
+	contentFormat := "openapi+json"
+
+	if namespaceApi == "" {
+		api := &clusterapimanagement.API{}
+		if err := r.Get(ctx, client.ObjectKey{Name: apiName}, api); err != nil {
+			return err
+		}
+
+		// patch swagger into API resource spec.forProvider.import
+		importSpec := clusterapimanagement.ImportParameters{
+			ContentFormat: &contentFormat,
+			ContentValue:  &swaggerJSON,
+		}
+
+		api.Spec.ForProvider.Import = &importSpec
+
+		if err := r.Update(ctx, api); err != nil {
+			return err
+		}
+
+		r.Log.Info("Cluster API resource patched successfully", "APIName", apiName)
+		return nil
+	}
+
 	api := &namespacedapimanagement.API{}
 	if err := r.Get(ctx, client.ObjectKey{Name: apiName, Namespace: namespaceApi}, api); err != nil {
 		return err
 	}
-
-	contentFormat := "openapi+json"
 
 	// patch swagger into API resource spec.forProvider.import
 	importSpec := namespacedapimanagement.ImportParameters{
