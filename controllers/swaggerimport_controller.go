@@ -180,10 +180,10 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 			lastError = err
 			continue // keep trying ports if one fails
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
 			swaggerJSON, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			if err != nil {
 				lastError = err
 				continue
@@ -211,6 +211,7 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 
 			return nil
 		} else {
+			resp.Body.Close()
 			lastError = fmt.Errorf("swagger version not found or invalid: %s, HTTP status: %d", version, resp.StatusCode)
 		}
 	}
