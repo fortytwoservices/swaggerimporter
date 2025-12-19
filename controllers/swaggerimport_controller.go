@@ -79,8 +79,12 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// handle each version
 	for _, api := range apis.Items {
 		log.Info("Processing matching API", "API Name", api.Name, "Label Matched", appName)
-		version := fmt.Sprintf("v%s.0", strings.Split(strings.Split(api.Name, "-v")[1], ".")[0])
-		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, api.Namespace, appName, version)
+		version, err := parseVersion(api.Name)
+		if err != nil {
+			log.Error(err, "Failed to parse version from API name", "apiName", api.Name)
+			continue // skip APIs with invalid name format
+		}
+		err = r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, api.Namespace, appName, version)
 		if err != nil {
 			log.Error(err, "Failed to fetch Swagger JSON", "apiName", api.Name)
 			continue // continue with other APIs if this one fails
@@ -90,8 +94,12 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// handle each version
 	for _, api := range clusterAPIs.Items {
 		log.Info("Processing matching API", "API Name", api.Name, "Label Matched", appName)
-		version := fmt.Sprintf("v%s.0", strings.Split(strings.Split(api.Name, "-v")[1], ".")[0])
-		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, api.Namespace, appName, version)
+		version, err := parseVersion(api.Name)
+		if err != nil {
+			log.Error(err, "Failed to parse version from API name", "apiName", api.Name)
+			continue // skip APIs with invalid name format
+		}
+		err = r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, api.Namespace, appName, version)
 		if err != nil {
 			log.Error(err, "Failed to fetch Swagger JSON", "apiName", api.Name)
 			continue // continue with other APIs if this one fails
@@ -99,6 +107,31 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+}
+
+// parseVersion extracts the version from an API name in the format "<name>-v<major>.<minor>"
+// Returns the version in the format "v<major>.0" and an error if the format is invalid
+func parseVersion(apiName string) (string, error) {
+	// Check if the API name contains "-v"
+	parts := strings.Split(apiName, "-v")
+	if len(parts) < 2 {
+		return "", fmt.Errorf("API name does not contain '-v': %s", apiName)
+	}
+
+	// Extract the version part after "-v"
+	versionPart := parts[1]
+	if versionPart == "" {
+		return "", fmt.Errorf("version part is empty in API name: %s", apiName)
+	}
+
+	// Split by "." to get the major version
+	versionComponents := strings.Split(versionPart, ".")
+	if len(versionComponents) == 0 || versionComponents[0] == "" {
+		return "", fmt.Errorf("invalid version format in API name: %s", apiName)
+	}
+
+	// Return the version in the format "v<major>.0"
+	return fmt.Sprintf("v%s.0", versionComponents[0]), nil
 }
 
 func (r *SwaggerImportReconciler) getPorts(ctx context.Context, namespace, appName string) ([]int32, error) {
