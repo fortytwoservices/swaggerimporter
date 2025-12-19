@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"net/http"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -36,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	//+kubebuilder:scaffold:imports
-	apimanagementv1beta1 "github.com/upbound/provider-azure/apis/apimanagement/v1beta1"
+	namespacedapimanagementv1beta1 "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 )
 
 var (
@@ -46,7 +47,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(apimanagementv1beta1.AddToScheme(scheme))
+	utilruntime.Must(namespacedapimanagementv1beta1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 }
@@ -123,9 +124,10 @@ func main() {
 	}
 
 	if err = (&controllers.SwaggerImportReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Log:    ctrl.Log.WithName("controllers").WithName("SwaggerImport"),
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Log:     ctrl.Log.WithName("controllers").WithName("SwaggerImport"),
+		HTTPGet: http.Get,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "SwaggerImport")
 		os.Exit(1)

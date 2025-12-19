@@ -1,15 +1,26 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  labels:
-    app.kubernetes.io/name: clusterrole
-    app.kubernetes.io/instance: manager-role
-    app.kubernetes.io/component: rbac
-    app.kubernetes.io/created-by: swagger-importer
-    app.kubernetes.io/part-of: swagger-importer
-    app.kubernetes.io/managed-by: kustomize
   name: manager-role
 rules:
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apimanagement.azure.m.upbound.io
+  - apimanagement.azure.upbound.io
+  resources:
+  - apis
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
