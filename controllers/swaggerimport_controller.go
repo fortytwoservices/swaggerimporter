@@ -117,7 +117,7 @@ func (r *SwaggerImportReconciler) getPorts(ctx context.Context, namespace, appNa
 	return ports, nil
 }
 
-func (r *SwaggerImportReconciler) needsUpdate(ctx context.Context, apiName, namespaceApi, appName, newSwaggerJSON string) (bool, error) {
+func (r *SwaggerImportReconciler) needsUpdate(ctx context.Context, apiName, namespaceApi, newSwaggerJSON string) (bool, error) {
 	api := &namespacedapimanagement.API{}
 	if err := r.Get(ctx, client.ObjectKey{Name: apiName, Namespace: namespaceApi}, api); err != nil {
 		return false, err
@@ -159,7 +159,7 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 			swaggerJSONString := string(swaggerJSON)
 
 			// Check if update is necessary
-			needsUpdate, err := r.needsUpdate(ctx, apiName, namespaceApi, appName, swaggerJSONString)
+			needsUpdate, err := r.needsUpdate(ctx, apiName, namespaceApi, swaggerJSONString)
 			if err != nil {
 				r.Log.Error(err, "Error checking if update is needed")
 				lastError = err
@@ -167,7 +167,7 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 			}
 
 			if needsUpdate {
-				if err := r.patchAPIResource(ctx, apiName, namespaceApi, appName, swaggerJSONString); err != nil {
+				if err := r.patchAPIResource(ctx, apiName, namespaceApi, swaggerJSONString); err != nil {
 					lastError = err
 					continue
 				}
@@ -184,7 +184,7 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 	return lastError // return error if all fails
 }
 
-func (r *SwaggerImportReconciler) patchAPIResource(ctx context.Context, apiName string, namespaceApi string, appName string, swaggerJSON string) error {
+func (r *SwaggerImportReconciler) patchAPIResource(ctx context.Context, apiName string, namespaceApi string, swaggerJSON string) error {
 	api := &namespacedapimanagement.API{}
 	if err := r.Get(ctx, client.ObjectKey{Name: apiName, Namespace: namespaceApi}, api); err != nil {
 		return err
