@@ -9,7 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	namespacedapimanagementv1beta1 "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
+	namespacedapimanagement "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,7 +38,7 @@ var _ = Describe("SwaggerImportReconciler", func() {
 		ctx = context.Background()
 		scheme = runtime.NewScheme()
 		_ = corev1.AddToScheme(scheme)
-		_ = namespacedapimanagementv1beta1.AddToScheme(scheme)
+		_ = namespacedapimanagement.AddToScheme(scheme)
 
 		mockSwaggerJSON = `{"swagger": "2.0", "info": {"title": "Mock API", "version": "1.0.0"}}`
 	})
@@ -72,16 +72,16 @@ var _ = Describe("SwaggerImportReconciler", func() {
 				},
 			}
 
-			api := &namespacedapimanagementv1beta1.API{
+			api := &namespacedapimanagement.API{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      apiName,
-					Namespace: namespaceApi, // Controller expects API in namespace matching appName
+					Namespace: namespaceApi,
 					Labels: map[string]string{
 						"application": appName,
 					},
 				},
-				Spec: namespacedapimanagementv1beta1.APISpec{
-					ForProvider: namespacedapimanagementv1beta1.APIParameters{
+				Spec: namespacedapimanagement.APISpec{
+					ForProvider: namespacedapimanagement.APIParameters{
 						// Initialize with empty or default values if needed
 					},
 				},
@@ -124,8 +124,8 @@ var _ = Describe("SwaggerImportReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify API was updated
-			updatedAPI := &namespacedapimanagementv1beta1.API{}
-			err = fakeClient.Get(ctx, types.NamespacedName{Name: apiName, Namespace: appName}, updatedAPI)
+			updatedAPI := &namespacedapimanagement.API{}
+			err = fakeClient.Get(ctx, types.NamespacedName{Name: apiName, Namespace: namespaceApi}, updatedAPI)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedAPI.Spec.ForProvider.Import).NotTo(BeNil())
 			Expect(updatedAPI.Spec.ForProvider.Import.ContentValue).NotTo(BeNil())

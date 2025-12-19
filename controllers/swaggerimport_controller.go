@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	namespacedapimanagementv1beta1 "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
+	namespacedapimanagement "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,6 +30,7 @@ type SwaggerImportReconciler struct {
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apimanagement.azure.upbound.io,resources=apis,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=apimanagement.azure.m.upbound.io,resources=apis,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch
 
 // Reconcile function to reconcile SwaggerImport
 func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -55,7 +56,7 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	// fetch API resources that match the extracted 'app' label
-	var apis namespacedapimanagementv1beta1.APIList
+	var apis namespacedapimanagement.APIList
 	apiLabelSelector := client.MatchingLabels{"application": appName}
 	if err := r.List(ctx, &apis, client.MatchingLabels(apiLabelSelector)); err != nil {
 		log.Error(err, "Failed to list API resources", "appName", appName)
@@ -70,7 +71,7 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	for _, api := range apis.Items {
 		log.Info("Processing matching API", "API Name", api.Name, "Label Matched", appName)
 		version := fmt.Sprintf("v%s.0", strings.Split(strings.Split(api.Name, "-v")[1], ".")[0])
-		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, appName, version)
+		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, api.Namespace, appName, version)
 		if err != nil {
 			log.Error(err, "Failed to fetch Swagger JSON", "apiName", api.Name)
 			continue // continue with other APIs if this one fails
@@ -116,9 +117,9 @@ func (r *SwaggerImportReconciler) getPorts(ctx context.Context, namespace, appNa
 	return ports, nil
 }
 
-func (r *SwaggerImportReconciler) needsUpdate(ctx context.Context, apiName, appName, newSwaggerJSON string) (bool, error) {
-	api := &namespacedapimanagementv1beta1.API{}
-	if err := r.Get(ctx, client.ObjectKey{Name: apiName, Namespace: appName}, api); err != nil {
+func (r *SwaggerImportReconciler) needsUpdate(ctx context.Context, apiName, namespaceApi, appName, newSwaggerJSON string) (bool, error) {
+	api := &namespacedapimanagement.API{}
+	if err := r.Get(ctx, client.ObjectKey{Name: apiName, Namespace: namespaceApi}, api); err != nil {
 		return false, err
 	}
 
@@ -130,7 +131,7 @@ func (r *SwaggerImportReconciler) needsUpdate(ctx context.Context, apiName, appN
 	return true, nil
 }
 
-func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, namespace, apiName, appName, version string) error {
+func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, namespace, apiName, namespaceApi, appName, version string) error {
 	ports, err := r.getPorts(ctx, namespace, appName)
 	if err != nil {
 		r.Log.Error(err, "Failed to get service ports", "appName", appName)
@@ -158,7 +159,7 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 			swaggerJSONString := string(swaggerJSON)
 
 			// Check if update is necessary
-			needsUpdate, err := r.needsUpdate(ctx, apiName, appName, swaggerJSONString)
+			needsUpdate, err := r.needsUpdate(ctx, apiName, namespaceApi, appName, swaggerJSONString)
 			if err != nil {
 				r.Log.Error(err, "Error checking if update is needed")
 				lastError = err
@@ -166,7 +167,7 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 			}
 
 			if needsUpdate {
-				if err := r.patchAPIResource(ctx, apiName, appName, swaggerJSONString); err != nil {
+				if err := r.patchAPIResource(ctx, apiName, namespaceApi, appName, swaggerJSONString); err != nil {
 					lastError = err
 					continue
 				}
@@ -183,16 +184,16 @@ func (r *SwaggerImportReconciler) fetchAndSaveSwagger(ctx context.Context, names
 	return lastError // return error if all fails
 }
 
-func (r *SwaggerImportReconciler) patchAPIResource(ctx context.Context, apiName string, appName string, swaggerJSON string) error {
-	api := &namespacedapimanagementv1beta1.API{}
-	if err := r.Get(ctx, client.ObjectKey{Name: apiName, Namespace: appName}, api); err != nil {
+func (r *SwaggerImportReconciler) patchAPIResource(ctx context.Context, apiName string, namespaceApi string, appName string, swaggerJSON string) error {
+	api := &namespacedapimanagement.API{}
+	if err := r.Get(ctx, client.ObjectKey{Name: apiName, Namespace: namespaceApi}, api); err != nil {
 		return err
 	}
 
 	contentFormat := "openapi+json"
 
 	// patch swagger into API resource spec.forProvider.import
-	importSpec := namespacedapimanagementv1beta1.ImportParameters{
+	importSpec := namespacedapimanagement.ImportParameters{
 		ContentFormat: &contentFormat,
 		ContentValue:  &swaggerJSON,
 	}
@@ -203,7 +204,7 @@ func (r *SwaggerImportReconciler) patchAPIResource(ctx context.Context, apiName 
 		return err
 	}
 
-	r.Log.Info("API resource patched successfully", "APIName", apiName)
+	r.Log.Info("API resource patched successfully", "APIName", apiName, "ApiNamespace", namespaceApi)
 	return nil
 }
 

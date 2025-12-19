@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	//+kubebuilder:scaffold:imports
-	namespacedapimanagementv1beta1 "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
+	namespacedapimanagement "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 )
 
 var (
@@ -47,7 +47,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(namespacedapimanagementv1beta1.AddToScheme(scheme))
+	utilruntime.Must(namespacedapimanagement.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 }
