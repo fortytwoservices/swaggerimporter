@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	//+kubebuilder:scaffold:imports
+	clusterapimanagement "github.com/upbound/provider-azure/v2/apis/cluster/apimanagement/v1beta1"
 	namespacedapimanagement "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 )
 
@@ -48,6 +49,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(namespacedapimanagement.AddToScheme(scheme))
+	utilruntime.Must(clusterapimanagement.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	clusterapimanagement "github.com/upbound/provider-azure/v2/apis/cluster/apimanagement/v1beta1"
 	namespacedapimanagement "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -54,20 +55,40 @@ func (r *SwaggerImportReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
+	apiLabelSelector := client.MatchingLabels{"application": appName}
+
 	// fetch API resources that match the extracted 'app' label
 	var apis namespacedapimanagement.APIList
-	apiLabelSelector := client.MatchingLabels{"application": appName}
 	if err := r.List(ctx, &apis, client.MatchingLabels(apiLabelSelector)); err != nil {
 		log.Error(err, "Failed to list API resources", "appName", appName)
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
-	if len(apis.Items) == 0 {
+	// fetch clustered api reosurces as well
+	var clusterAPIs clusterapimanagement.APIList
+	if err := r.List(ctx, &clusterAPIs, client.MatchingLabels(apiLabelSelector), client.InNamespace("")); err != nil {
+		log.Error(err, "Failed to list clustered API resources", "appName", appName)
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+	}
+	// apis.Items = append(apis.Items, clusterAPIs.Items...)
+
+	if len(apis.Items) == 0 && len(clusterAPIs.Items) == 0 {
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	// handle each version
 	for _, api := range apis.Items {
+		log.Info("Processing matching API", "API Name", api.Name, "Label Matched", appName)
+		version := fmt.Sprintf("v%s.0", strings.Split(strings.Split(api.Name, "-v")[1], ".")[0])
+		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, api.Namespace, appName, version)
+		if err != nil {
+			log.Error(err, "Failed to fetch Swagger JSON", "apiName", api.Name)
+			continue // continue with other APIs if this one fails
+		}
+	}
+
+	// handle each version
+	for _, api := range clusterAPIs.Items {
 		log.Info("Processing matching API", "API Name", api.Name, "Label Matched", appName)
 		version := fmt.Sprintf("v%s.0", strings.Split(strings.Split(api.Name, "-v")[1], ".")[0])
 		err := r.fetchAndSaveSwagger(ctx, pod.Namespace, api.Name, api.Namespace, appName, version)

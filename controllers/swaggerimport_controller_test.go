@@ -9,6 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	clusterapimanagement "github.com/upbound/provider-azure/v2/apis/cluster/apimanagement/v1beta1"
 	namespacedapimanagement "github.com/upbound/provider-azure/v2/apis/namespaced/apimanagement/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,6 +40,7 @@ var _ = Describe("SwaggerImportReconciler", func() {
 		scheme = runtime.NewScheme()
 		_ = corev1.AddToScheme(scheme)
 		_ = namespacedapimanagement.AddToScheme(scheme)
+		_ = clusterapimanagement.AddToScheme(scheme)
 
 		mockSwaggerJSON = `{"swagger": "2.0", "info": {"title": "Mock API", "version": "1.0.0"}}`
 	})
