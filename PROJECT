@@ -9,5 +9,5 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: swagger-importer
-repo: github.com/fortytwoservices/swagger-importer
+repo: github.com/fortytwoservices/swaggerimporter
 version: "3"
