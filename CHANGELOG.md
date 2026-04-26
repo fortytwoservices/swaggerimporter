@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/fortytwoservices/swaggerimporter/compare/v1.0.0...v1.1.0) (2026-04-26)
+
+
+### Features
+
+* update golang version ([#102](https://github.com/fortytwoservices/swaggerimporter/issues/102)) ([e38d908](https://github.com/fortytwoservices/swaggerimporter/commit/e38d90806d4deacc817dd4013dfe3ac40ad842c3))
+
 ## 1.0.0 (2025-12-19)
 
 
