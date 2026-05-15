@@ -7,10 +7,10 @@ require (
 	github.com/onsi/ginkgo/v2 v2.28.3
 	github.com/onsi/gomega v1.40.0
 	github.com/upbound/provider-azure/v2 v2.5.0
-	k8s.io/api v0.36.0
-	k8s.io/apimachinery v0.36.0
-	k8s.io/client-go v0.36.0
-	sigs.k8s.io/controller-runtime v0.24.0
+	k8s.io/api v0.36.1
+	k8s.io/apimachinery v0.36.1
+	k8s.io/client-go v0.36.1
+	sigs.k8s.io/controller-runtime v0.24.1
 )
 
 require (
